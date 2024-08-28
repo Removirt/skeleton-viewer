@@ -158,8 +158,8 @@ def plot_z_slice(labels, slice_index):
     return scatter_slice
 
 # Main function to handle visualization
-def visualize_skeletonization(labels_filepath, anisotropy, z_slice_index):
-    """Main function to handle the entire skeletonization visualization with a split view."""
+def visualize_skeletonization(labels_filepath, anisotropy):
+    """Main function to handle the entire skeletonization visualization with interactive slice view."""
     labels = load_labels(labels_filepath)
 
     # Generate the scatter plots for thinning, volume, and skeleton
@@ -169,15 +169,14 @@ def visualize_skeletonization(labels_filepath, anisotropy, z_slice_index):
     skeleton_list = skeletonize_labels(labels, anisotropy)
     skeleton_traces = draw_skeleton(skeleton_list, anisotropy)
 
-    # Plot a Z slice of the original volume
-    scatter_z_slice = plot_z_slice(labels, z_slice_index)
+    # Get the number of slices along the Z-axis
+    num_slices = labels.shape[2]
 
     # Create a subplot with two columns (3D view and 2D Z slice view)
     fig = make_subplots(
         rows=1, cols=2,
         specs=[[{'type': 'scatter3d'}, {'type': 'scatter'}]],
-        # column_widths=[0.6, 0.4],
-        subplot_titles=("3D Skeletonization", f"2D Z Slice (Z={z_slice_index})")
+        subplot_titles=("3D Skeletonization", "2D Z Slice")
     )
 
     # Add the 3D skeletonization and volume plots to the first column
@@ -185,18 +184,41 @@ def visualize_skeletonization(labels_filepath, anisotropy, z_slice_index):
     fig.add_trace(scatter_volume, row=1, col=1)
     for trace in skeleton_traces:
         fig.add_trace(trace, row=1, col=1)
-    
-    # Add the 2D Z slice plot to the second column
+
+    # Initial slice to display
+    initial_slice = 0
+    scatter_z_slice = plot_z_slice(labels, initial_slice)
     fig.add_trace(scatter_z_slice, row=1, col=2)
 
-    # Update layout
+    # Create slider steps for each Z-slice
+    steps = []
+    for i in range(num_slices):
+        step = {
+            "method": "restyle",
+            "args": [{"x": [np.where(labels[:, :, i])[0]],
+                      "y": [np.where(labels[:, :, i])[1]]},
+                      len(fig.data) - 1],
+            "label": str(i)
+        }
+        steps.append(step)
+
+    # Add slider to the layout
+    sliders = [dict(
+        active=0,
+        currentvalue={"prefix": "Z Slice: "},
+        pad={"t": 50},
+        steps=steps
+    )]
+
+    # Update layout with slider and other parameters
     fig.update_layout(
-        title="3D Skeletonization and 2D Z Slice",
+        title="3D Skeletonization and Interactive 2D Z Slice",
         scene=dict(
             xaxis=dict(title='X'),
             yaxis=dict(title='Y'),
             zaxis=dict(title='Z'),
         ),
+        sliders=sliders,
         margin=dict(l=0, r=0, b=50, t=50),
         height=900
     )
@@ -208,7 +230,6 @@ if __name__ == '__main__':
     # Set parameters and file paths
     LABELS_FILEPATH = '../skeletonization/labelsTr/hepaticvessel_001.nii.gz'
     ANISOTROPY = (900, 900, 5000)
-    Z_SLICE_INDEX = 10  # Example slice index to display
 
-    # Run the visualization with split view
-    visualize_skeletonization(LABELS_FILEPATH, ANISOTROPY, Z_SLICE_INDEX)
+    # Run the visualization with interactive slice view
+    visualize_skeletonization(LABELS_FILEPATH, ANISOTROPY)
