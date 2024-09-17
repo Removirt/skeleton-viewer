@@ -1,11 +1,10 @@
+from dash import Dash, dcc, html, Input, Output
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import numpy as np
 import nibabel as nib
 import kimimaro
-import plotly.graph_objs as go
-from plotly.subplots import make_subplots
 from skimage.morphology import skeletonize
-import plotly.express as px
-import time
 
 # Function to load labels
 def load_labels(filepath):
@@ -86,7 +85,6 @@ def draw_skeleton(skeleton_list, anisotropy):
     skeleton_traces = []
     
     for label, skeleton in skeleton_list.items():
-        print(f"Plotting skeleton component: {label}")
         # Adjust the vertices for anisotropy
         skeleton.vertices[:, 0] /= anisotropy[0]
         skeleton.vertices[:, 1] /= anisotropy[1]
@@ -160,98 +158,77 @@ def plot_z_slice(labels, slice_index):
     
     return scatter_slice
 
-# Main function to handle visualization
-def visualize_skeletonization(labels_filepath, anisotropy):
-    """Main function to handle the entire skeletonization visualization with interactive slice view."""
-    labels = load_labels(labels_filepath)
 
-    # Generate the scatter plots for thinning, volume, and skeleton
-    scatter_thinning = plot_thinning(labels)
-    scatter_volume = plot_volume(labels)
+# Dash app
+app = Dash(__name__)
 
-    skeleton_list = skeletonize_labels(labels, anisotropy)
-    skeleton_traces = draw_skeleton(skeleton_list, anisotropy)
+app.layout = html.Div([
+    html.H4('3D Skeletonization with Interactive Z-Slice'),
+    dcc.Graph(id="skeleton-graph"),
+    html.P("Z Slice:"),
+    dcc.Slider(id="z-slider", min=0, max=50, value=0, step=1),  # Placeholder slider for Z slices
+])
 
-    # Get the number of slices along the Z-axis
-    num_slices = labels.shape[2]
+# Load labels and set anisotropy parameters
+# TODO revisar
+LABELS_FILEPATH = '../skeletonization/labelsTr/hepaticvessel_001.nii.gz'
+ANISOTROPY = (900, 900, 5000)
+labels = load_labels(LABELS_FILEPATH)
 
-    # Create a subplot with two columns (3D view and 2D Z slice view)
+# Perform skeletonization and get the traces
+scatter_thinning = plot_thinning(labels)
+scatter_volume = plot_volume(labels)
+skeleton_list = skeletonize_labels(labels, ANISOTROPY)
+skeleton_traces = draw_skeleton(skeleton_list, ANISOTROPY)
+
+# Store results in the global variable
+skeletonization_results = {
+    'labels': labels,
+    'scatter_thinning': scatter_thinning,
+    'scatter_volume': scatter_volume,
+    'skeleton_traces': skeleton_traces
+}
+
+@app.callback(
+    Output("skeleton-graph", "figure"), 
+    Input("z-slider", "value"))
+def update_skeleton_plot(slice_index):
+
+    labels = skeletonization_results['labels']
+    scatter_thinning = skeletonization_results['scatter_thinning']
+    scatter_volume = skeletonization_results['scatter_volume']
+    skeleton_traces = skeletonization_results['skeleton_traces']
+
+    # Create subplot for 3D skeleton and 2D slice
     fig = make_subplots(
         rows=1, cols=2,
         specs=[[{'type': 'scatter3d'}, {'type': 'scatter'}]],
-        subplot_titles=("3D Skeletonization", "2D Z Slice")
+        subplot_titles=("3D Skeletonization", f"Z Slice {slice_index}")
     )
 
-    # Add the 3D skeletonization and volume plots to the first column
+    # Add thinning, volume, and skeleton traces to the 3D plot
     fig.add_trace(scatter_thinning, row=1, col=1)
     fig.add_trace(scatter_volume, row=1, col=1)
     for trace in skeleton_traces:
         fig.add_trace(trace, row=1, col=1)
 
-    # Initial slice to display
-    initial_slice = 0
-    scatter_z_slice = plot_z_slice(labels, initial_slice)
+    # Add the selected Z slice to the 2D plot
+    scatter_z_slice = plot_z_slice(labels, slice_index)
     fig.add_trace(scatter_z_slice, row=1, col=2)
 
-    # Create slider steps for each Z-slice
-    steps = []
-    for i in range(num_slices):
-        step = {
-            "method": "restyle",
-            "args": [{"x": [np.where(labels[:, :, i])[0]],
-                      "y": [np.where(labels[:, :, i])[1]]},
-                      len(fig.data) - 1],
-            "label": str(i)
-        }
-        steps.append(step)
-
-    # Add slider to the layout
-    sliders = [dict(
-        active=0,
-        currentvalue={"prefix": "Z Slice: "},
-        pad={"t": 50},
-        steps=steps
-    )]
-
-    # Update layout with slider and other parameters
+    # Update layout
     fig.update_layout(
-        title="3D Skeletonization and Interactive 2D Z Slice",
+        title="Skeletonization with Interactive Z-Slice",
+        height=800,
         scene=dict(
-            xaxis=dict(title='X'),
-            yaxis=dict(title='Y'),
-            zaxis=dict(title='Z'),
+            xaxis_title='X',
+            yaxis_title='Y',
+            zaxis_title='Z'
         ),
-        sliders=sliders,
-        margin=dict(l=0, r=0, b=50, t=50),
-        height=900,
-        clickmode='event+select'  # Enable click event
+        margin=dict(l=0, r=0, b=50, t=50)
     )
-
-    # Register a click event handler to print the coordinates
-    fig['layout']['updatemenus'] = [dict(type="buttons", showactive=False, 
-                                         buttons=[dict(label="Print Coordinates",
-                                                       method="restyle",
-                                                       args=[{'customdata': [], 'x': [], 'y': []}])])]
-
-    # Function to handle click events
-    def print_coordinates(trace, points, state):
-        """Handle click events by printing the coordinates."""
-        for point in points.point_inds:
-            x, y = trace.customdata[point]
-            print(f"Clicked coordinates: X={x}, Y={y}")
-            
-    scatter_z_slice.on_click(print_coordinates)
-
-    # Show the plot
-    fig.show()
+    
+    return fig
 
 if __name__ == '__main__':
-    # Set parameters and file paths
-    LABELS_FILEPATH = '../skeletonization/labelsTr/hepaticvessel_001.nii.gz'
-    ANISOTROPY = (900, 900, 5000)
-
-    # Run the visualization with interactive slice view
-    visualize_skeletonization(LABELS_FILEPATH, ANISOTROPY)
-
-    while True:
-        time.sleep(1)
+    app.run_server(debug=True)
