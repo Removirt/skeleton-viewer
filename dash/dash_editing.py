@@ -1,10 +1,26 @@
+import dash
 from dash import Dash, dcc, html, Input, Output
+from dash.dependencies import Input, Output, State
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 import nibabel as nib
 import kimimaro
 from skimage.morphology import skeletonize
+
+app = dash.Dash(__name__)
+
+app.layout = html.Div([
+    dcc.Graph(id='skeleton-graph'),
+    dcc.Slider(id='z-slider', min=0, max=100, step=1, value=50),
+    html.Div([
+        html.Button('Add Point', id='add-point-btn'),
+        html.Button('Move Point', id='move-point-btn'),
+        html.Button('Delete Point', id='delete-point-btn'),
+        dcc.Input(id='point-coordinates', type='text', placeholder='x,y,z'),
+        dcc.Input(id='new-coordinates', type='text', placeholder='new x,y,z')
+    ])
+])
 
 # Function to load labels
 def load_labels(filepath):
@@ -158,42 +174,44 @@ def plot_z_slice(labels, slice_index):
     
     return scatter_slice
 
+# Global variable to store skeletonization results
+skeletonization_results = None
 
-# Dash app
-app = Dash(__name__)
+def precompute_skeletonization():
+    global skeletonization_results
+    if skeletonization_results is None:
+        LABELS_FILEPATH = '../skeletonization/labelsTr/hepaticvessel_001.nii.gz'
+        ANISOTROPY = (900, 900, 5000)
+        labels = load_labels(LABELS_FILEPATH)
 
-app.layout = html.Div([
-    html.H4('3D Skeletonization with Interactive Z-Slice and Point Click'),
-    dcc.Graph(id="skeleton-graph"),
-    html.P("Z Slice:"),
-    dcc.Slider(id="z-slider", min=0, max=50, value=0, step=1),  # Placeholder slider for Z slices
-    html.Div(id='click-output')  # New Div to display the coordinates of clicked points
-])
+        # Perform skeletonization and get the traces
+        scatter_thinning = plot_thinning(labels)
+        scatter_volume = plot_volume(labels)
+        skeleton_list = skeletonize_labels(labels, ANISOTROPY)
+        skeleton_traces = draw_skeleton(skeleton_list, ANISOTROPY)
 
-# Load labels and set anisotropy parameters
-LABELS_FILEPATH = '../skeletonization/labelsTr/hepaticvessel_001.nii.gz'
-ANISOTROPY = (900, 900, 5000)
-labels = load_labels(LABELS_FILEPATH)
+        # Store results in the global variable
+        skeletonization_results = {
+            'labels': labels,
+            'scatter_thinning': scatter_thinning,
+            'scatter_volume': scatter_volume,
+            'skeleton_traces': skeleton_traces,
+            'skeleton_list': skeleton_list
+        }
 
-scatter_thinning = plot_thinning(labels)
-scatter_volume = plot_volume(labels)
-skeleton_list = skeletonize_labels(labels, ANISOTROPY)
-skeleton_traces = draw_skeleton(skeleton_list, ANISOTROPY)
-
-skeletonization_results = {
-    'labels': labels,
-    'scatter_thinning': scatter_thinning,
-    'scatter_volume': scatter_volume,
-    'skeleton_traces': skeleton_traces
-}
+# Call the precompute function once at the start
+precompute_skeletonization()
 
 @app.callback(
     Output("skeleton-graph", "figure"), 
-    Output("click-output", "children"),  # Output to update the coordinates display
-    Input("z-slider", "value"),
-    Input("skeleton-graph", "clickData")  # Input to detect click events
-)
-def update_skeleton_plot(slice_index, click_data):
+    Input("z-slider", "value"))
+def update_skeleton_plot(slice_index):
+    global skeletonization_results
+
+    # Ensure skeletonization results are precomputed
+    if skeletonization_results is None:
+        precompute_skeletonization()
+
     labels = skeletonization_results['labels']
     scatter_thinning = skeletonization_results['scatter_thinning']
     scatter_volume = skeletonization_results['scatter_volume']
@@ -228,22 +246,53 @@ def update_skeleton_plot(slice_index, click_data):
         margin=dict(l=0, r=0, b=50, t=50)
     )
     
-    # Handle click event
-    clicked_coordinates = "Click on a point to see the coordinates."
-    if click_data:
-        # Extract x, y (and z if available) coordinates from clickData
-        points = click_data['points'][0]
-        x = points.get('x')
-        y = points.get('y')
-        z = points.get('z') if 'z' in points else None
+    return fig
 
-        # Format the clicked coordinates
-        if z is not None:
-            clicked_coordinates = f"Clicked point at: X={x}, Y={y}, Z={z}"
-        else:
-            clicked_coordinates = f"Clicked point at: X={x}, Y={y}"
+@app.callback(
+    Output('skeleton-graph', 'figure'),
+    [Input('add-point-btn', 'n_clicks'),
+     Input('move-point-btn', 'n_clicks'),
+     Input('delete-point-btn', 'n_clicks')],
+    [State('point-coordinates', 'value'),
+     State('new-coordinates', 'value')]
+)
+def edit_skeleton(add_clicks, move_clicks, delete_clicks, point_coords, new_coords):
+    global skeletonization_results
 
-    return fig, clicked_coordinates
+    if skeletonization_results is None:
+        precompute_skeletonization()
+
+    skeleton_list = skeletonization_results['skeleton_list']
+
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return dash.no_update
+
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    if button_id == 'add-point-btn' and point_coords:
+        x, y, z = map(int, point_coords.split(','))
+        skeleton_list.append((x, y, z))
+
+    elif button_id == 'move-point-btn' and point_coords and new_coords:
+        x, y, z = map(int, point_coords.split(','))
+        new_x, new_y, new_z = map(int, new_coords.split(','))
+        if (x, y, z) in skeleton_list:
+            skeleton_list.remove((x, y, z))
+            skeleton_list.append((new_x, new_y, new_z))
+
+    elif button_id == 'delete-point-btn' and point_coords:
+        x, y, z = map(int, point_coords.split(','))
+        if (x, y, z) in skeleton_list:
+            skeleton_list.remove((x, y, z))
+
+    # Redraw skeleton
+    skeleton_traces = draw_skeleton(skeleton_list, ANISOTROPY)
+    skeletonization_results['skeleton_traces'] = skeleton_traces
+
+    # Update the figure
+    fig = update_skeleton_plot(slice_index=50)  # Or use the current slice index
+    return fig
 
 if __name__ == '__main__':
     app.run_server(debug=True)
