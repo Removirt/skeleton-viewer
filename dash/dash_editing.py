@@ -1,26 +1,10 @@
-import dash
-from dash import Dash, dcc, html, Input, Output
-from dash.dependencies import Input, Output, State
+from dash import Dash, dcc, html, Input, Output, State
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 import nibabel as nib
 import kimimaro
 from skimage.morphology import skeletonize
-
-app = dash.Dash(__name__)
-
-app.layout = html.Div([
-    dcc.Graph(id='skeleton-graph'),
-    dcc.Slider(id='z-slider', min=0, max=100, step=1, value=50),
-    html.Div([
-        html.Button('Add Point', id='add-point-btn'),
-        html.Button('Move Point', id='move-point-btn'),
-        html.Button('Delete Point', id='delete-point-btn'),
-        dcc.Input(id='point-coordinates', type='text', placeholder='x,y,z'),
-        dcc.Input(id='new-coordinates', type='text', placeholder='new x,y,z')
-    ])
-])
 
 # Function to load labels
 def load_labels(filepath):
@@ -174,44 +158,79 @@ def plot_z_slice(labels, slice_index):
     
     return scatter_slice
 
-# Global variable to store skeletonization results
-skeletonization_results = None
 
-def precompute_skeletonization():
-    global skeletonization_results
-    if skeletonization_results is None:
-        LABELS_FILEPATH = '../skeletonization/labelsTr/hepaticvessel_001.nii.gz'
-        ANISOTROPY = (900, 900, 5000)
-        labels = load_labels(LABELS_FILEPATH)
 
-        # Perform skeletonization and get the traces
-        scatter_thinning = plot_thinning(labels)
-        scatter_volume = plot_volume(labels)
-        skeleton_list = skeletonize_labels(labels, ANISOTROPY)
-        skeleton_traces = draw_skeleton(skeleton_list, ANISOTROPY)
+# Load labels and anisotropy as before
+LABELS_FILEPATH = '../skeletonization/labelsTr/hepaticvessel_001.nii.gz'
+ANISOTROPY = (900, 900, 5000)
+labels = load_labels(LABELS_FILEPATH)
 
-        # Store results in the global variable
-        skeletonization_results = {
-            'labels': labels,
-            'scatter_thinning': scatter_thinning,
-            'scatter_volume': scatter_volume,
-            'skeleton_traces': skeleton_traces,
-            'skeleton_list': skeleton_list
-        }
+scatter_thinning = plot_thinning(labels)
+scatter_volume = plot_volume(labels)
+skeleton_list = skeletonize_labels(labels, ANISOTROPY)
+skeleton_traces = draw_skeleton(skeleton_list, ANISOTROPY)
 
-# Call the precompute function once at the start
-precompute_skeletonization()
+skeletonization_results = {
+    'labels': labels,
+    'scatter_thinning': scatter_thinning,
+    'scatter_volume': scatter_volume,
+    'skeleton_traces': skeleton_traces
+}
+
+# Dash app layout
+app = Dash(__name__)
+
+app.layout = html.Div([
+    html.H4('3D Skeletonization Editor'),
+    dcc.Graph(id="skeleton-graph"),
+    html.P("Z Slice:"),
+    dcc.Slider(id="z-slider", min=0, max=50, value=0, step=1),
+    
+    # Add a switch to toggle between "View" and "Edit" mode
+    html.P("Mode:"),
+    dcc.RadioItems(
+        id='mode-toggle',
+        options=[
+            {'label': 'View Mode', 'value': 'view'},
+            {'label': 'Edit Mode', 'value': 'edit'}
+        ],
+        value='view',  # Default to view mode
+        inline=True
+    ),
+    
+    # Display for selected point
+    html.Div(id='click-output'),
+    
+    # Buttons to add and delete points
+    html.Button('Delete Point', id='delete-point', n_clicks=0, disabled=True),
+    html.Button('Add Point', id='add-point', n_clicks=0, disabled=True)
+])
+
+# State variables to track selected point and edits
+selected_point = {
+    'x': None,
+    'y': None,
+    'z': None
+}
+edited_points = {
+    'add': [],
+    'delete': []
+}
 
 @app.callback(
     Output("skeleton-graph", "figure"), 
-    Input("z-slider", "value"))
-def update_skeleton_plot(slice_index):
-    global skeletonization_results
-
-    # Ensure skeletonization results are precomputed
-    if skeletonization_results is None:
-        precompute_skeletonization()
-
+    Output("click-output", "children"),  # Display selected point
+    Output("delete-point", "disabled"),  # Enable/Disable delete button
+    Output("add-point", "disabled"),  # Enable/Disable add button
+    Input("z-slider", "value"),
+    Input("skeleton-graph", "clickData"),  # Capture click data
+    Input("mode-toggle", "value"),  # Mode toggle
+    State("delete-point", "n_clicks"),
+    State("add-point", "n_clicks")
+)
+def update_skeleton_plot(slice_index, click_data, mode, delete_clicks, add_clicks):
+    global selected_point, edited_points
+    
     labels = skeletonization_results['labels']
     scatter_thinning = skeletonization_results['scatter_thinning']
     scatter_volume = skeletonization_results['scatter_volume']
@@ -234,9 +253,45 @@ def update_skeleton_plot(slice_index):
     scatter_z_slice = plot_z_slice(labels, slice_index)
     fig.add_trace(scatter_z_slice, row=1, col=2)
 
-    # Update layout
+    clicked_coordinates = "Click on a point to edit."
+
+    # Only allow editing in "Edit Mode"
+    if mode == 'edit':
+        if click_data:
+            # Extract coordinates from clickData
+            points = click_data['points'][0]
+            x = points.get('x')
+            y = points.get('y')
+            z = points.get('z') if 'z' in points else None
+
+            # Update selected point
+            selected_point = {'x': x, 'y': y, 'z': z}
+            clicked_coordinates = f"Selected point at: X={x}, Y={y}, Z={z}"
+
+        # Enable add/delete buttons if a point is selected
+        delete_disabled = False if selected_point['x'] is not None else True
+        add_disabled = False if selected_point['x'] is not None else True
+    else:
+        # Disable buttons in "View Mode"
+        delete_disabled = True
+        add_disabled = True
+        selected_point = {'x': None, 'y': None, 'z': None}
+
+    # Perform deletion if delete button is clicked
+    if delete_clicks > 0 and selected_point['x'] is not None:
+        edited_points['delete'].append(selected_point)
+        clicked_coordinates += " | Point deleted."
+        selected_point = {'x': None, 'y': None, 'z': None}  # Reset selected point
+
+    # Perform addition if add button is clicked
+    if add_clicks > 0 and selected_point['x'] is not None:
+        edited_points['add'].append(selected_point)
+        clicked_coordinates += " | Point added."
+        selected_point = {'x': None, 'y': None, 'z': None}  # Reset selected point
+
+    # Render the figure
     fig.update_layout(
-        title="Skeletonization with Interactive Z-Slice",
+        title="Skeletonization Editor with Interactive Z-Slice",
         height=800,
         scene=dict(
             xaxis_title='X',
@@ -245,54 +300,8 @@ def update_skeleton_plot(slice_index):
         ),
         margin=dict(l=0, r=0, b=50, t=50)
     )
-    
-    return fig
 
-@app.callback(
-    Output('skeleton-graph', 'figure'),
-    [Input('add-point-btn', 'n_clicks'),
-     Input('move-point-btn', 'n_clicks'),
-     Input('delete-point-btn', 'n_clicks')],
-    [State('point-coordinates', 'value'),
-     State('new-coordinates', 'value')]
-)
-def edit_skeleton(add_clicks, move_clicks, delete_clicks, point_coords, new_coords):
-    global skeletonization_results
-
-    if skeletonization_results is None:
-        precompute_skeletonization()
-
-    skeleton_list = skeletonization_results['skeleton_list']
-
-    ctx = dash.callback_context
-    if not ctx.triggered:
-        return dash.no_update
-
-    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
-    if button_id == 'add-point-btn' and point_coords:
-        x, y, z = map(int, point_coords.split(','))
-        skeleton_list.append((x, y, z))
-
-    elif button_id == 'move-point-btn' and point_coords and new_coords:
-        x, y, z = map(int, point_coords.split(','))
-        new_x, new_y, new_z = map(int, new_coords.split(','))
-        if (x, y, z) in skeleton_list:
-            skeleton_list.remove((x, y, z))
-            skeleton_list.append((new_x, new_y, new_z))
-
-    elif button_id == 'delete-point-btn' and point_coords:
-        x, y, z = map(int, point_coords.split(','))
-        if (x, y, z) in skeleton_list:
-            skeleton_list.remove((x, y, z))
-
-    # Redraw skeleton
-    skeleton_traces = draw_skeleton(skeleton_list, ANISOTROPY)
-    skeletonization_results['skeleton_traces'] = skeleton_traces
-
-    # Update the figure
-    fig = update_skeleton_plot(slice_index=50)  # Or use the current slice index
-    return fig
+    return fig, clicked_coordinates, delete_disabled, add_disabled
 
 if __name__ == '__main__':
     app.run_server(debug=True)
