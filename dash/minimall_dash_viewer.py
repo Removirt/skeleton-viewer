@@ -111,5 +111,19 @@ def update_slice_plot(slider_value):
     }
 
 
+@app.callback(
+    # Output('output', 'children'),
+    Input('2d-slice-plot', 'clickData')
+)
+def display_click_data(clickData):
+    if clickData:
+        point = clickData['points'][0]
+        x = point['x']
+        y = point['y']
+        # print(f"Clicked point: x={x}, y={y}")
+        print(point)
+        # print(clickData['points'])
+    # return ""
+
 if __name__ == '__main__':
     app.run_server(debug=True)
