@@ -1,8 +1,10 @@
+import os
 from dash import Dash, dcc, html, Input, Output
 import plotly.graph_objects as go
 import numpy as np
 import nibabel as nib
 from skimage.morphology import skeletonize
+import json
 
 # Function to load label data from a NIfTI file
 def load_labels(filepath):
@@ -11,8 +13,6 @@ def load_labels(filepath):
     return labels
 
 # Plot the original volume in a 3D scatter plot
-
-
 def plot_volume(labels, alpha=0.05):
     volume = np.where(labels)
     scatter_volume = go.Scatter3d(
@@ -41,6 +41,12 @@ def load_thinning(labels):
     skeleton_points = np.array(np.where(skeleton)).T
     return skeleton_points
 
+# Save skeleton points to a JSON file
+def save_skeleton(skeleton_points, filename="modified_skeleton.json"):
+    with open(filename, 'w') as f:
+        json.dump(skeleton_points, f)
+    print(f"Skeleton saved to {filename}")
+
 # Dash app initialization
 app = Dash(__name__)
 
@@ -48,7 +54,12 @@ app = Dash(__name__)
 LABELS_FILEPATH = '../skeletonization/labelsTr/hepaticvessel_001.nii.gz'
 labels = load_labels(LABELS_FILEPATH)
 scatter_volume = plot_volume(labels)
-skeleton_points = load_thinning(labels)
+
+# Load skeleton from json file if it exists
+if os.path.exists("modified_skeleton.json"):
+    skeleton_points = np.array(json.load(open("modified_skeleton.json")))
+else:
+    skeleton_points = load_thinning(labels)
 
 # Store skeleton points in a mutable list
 skeleton_points_list = skeleton_points.tolist()
@@ -95,7 +106,9 @@ app.layout = html.Div([
         max=labels.shape[2] - 1,
         value=0,
         step=1
-    )
+    ),
+    html.Button("Save Skeleton", id="save-button", n_clicks=0),
+    html.Div(id="save-message")
 ])
 
 # Combined callback to update the 2D Z-slice plot and handle click interactions
@@ -171,6 +184,17 @@ def update_slice_and_handle_click(slider_value, clickData):
             width=800
         )
     }
+
+# Callback to save modified skeleton when Save button is clicked
+@app.callback(
+    Output("save-message", "children"),
+    Input("save-button", "n_clicks")
+)
+def save_skeleton_points(n_clicks):
+    if n_clicks > 0:
+        save_skeleton(skeletonization_results['skeleton_points'])
+        return "Skeleton saved successfully!"
+    return ""
 
 if __name__ == '__main__':
     app.run_server(debug=True)
