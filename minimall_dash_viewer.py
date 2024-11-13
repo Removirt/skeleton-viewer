@@ -187,14 +187,33 @@ def update_slice_and_handle_click(slider_value, clickData):
 
 # Callback to save modified skeleton when Save button is clicked
 @app.callback(
-    Output("save-message", "children"),
+    Output("3d-scatter-plot", "figure"),
     Input("save-button", "n_clicks")
 )
 def save_skeleton_points(n_clicks):
     if n_clicks > 0:
         save_skeleton(skeletonization_results['skeleton_points'])
-        return "Skeleton saved successfully!"
-    return ""
+        # return "Skeleton saved successfully!"
+    
+        # Update the 3D scatter plot with the modified skeleton
+        skeleton_points = np.array(skeletonization_results['skeleton_points'])
+        scatter_skeleton = go.Scatter3d(
+            x=skeleton_points[:, 0], y=skeleton_points[:, 1], z=skeleton_points[:, 2],
+            mode='markers',
+            marker=dict(size=2, color='red', opacity=0.5),
+            name="Skeleton"
+        )
+        skeletonization_results['scatter_skeleton'] = scatter_skeleton
+
+        # update the 3D scatter plot
+        return {
+            'data': [scatter_volume, scatter_skeleton],
+            'layout': go.Layout(
+                title='3D Scatter Plot of Volume with Modified Skeleton',
+                height=800,
+            )
+        }    
+    return dash.no_update
 
 if __name__ == '__main__':
     app.run_server(debug=True)
