@@ -180,5 +180,55 @@ def update_slice(slider_value):
     z_slice = slider_value
     return generate_slice_figure(z_slice, labels, skeletonization_results['skeleton_points'])
 
+# Callback for handling clicks on the 2D slice plot
+@app.callback(
+    Output('2d-slice-plot', 'figure', allow_duplicate=True),
+    [Input('2d-slice-plot', 'clickData')],
+    State('z-slider', 'value'),
+)
+def handle_click(clickData, slider_value):
+    if clickData:
+        point_data = clickData['points'][0]
+        x, y = int(point_data['x']), int(point_data['y'])
+        z = slider_value
+        point = [x, y, z]
+
+        if point in skeletonization_results['skeleton_points']:
+            skeletonization_results['skeleton_points'].remove(point)
+        else:
+            skeletonization_results['skeleton_points'].append(point)
+
+    # Regenerates the 2D plot with the updated skeleton points
+    return generate_slice_figure(slider_value, labels, skeletonization_results['skeleton_points'])
+
+# Callback to save the modified skeleton points when clicking the Save button
+@app.callback(
+    Output("3d-scatter-plot", "figure"),
+    Input("save-button", "n_clicks")
+)
+def save_skeleton_points(n_clicks):
+    if n_clicks > 0:
+        # save_skeleton(skeletonization_results['skeleton_points'], filename=SKELETON_FILEPATH)  <-- Línea original comentada
+        save_skeleton(skeletonization_results['skeleton_points'], filename=skeleton_filepath)  # <-- Usamos skeleton_filepath
+        # Actualiza el gráfico 3D con el esqueleto modificado
+        skeleton_points = np.array(skeletonization_results['skeleton_points'])
+        scatter_skeleton = go.Scatter3d(
+            x=skeleton_points[:, 0], y=skeleton_points[:, 1], z=skeleton_points[:, 2],
+            mode='markers',
+            marker=dict(size=2, color='red', opacity=0.5),
+            name="Skeleton"
+        )
+        skeletonization_results['scatter_skeleton'] = scatter_skeleton
+
+        # 3D graph update
+        return {
+            'data': [scatter_volume, scatter_skeleton],
+            'layout': go.Layout(
+                title='3D Scatter Plot of Volume with Modified Skeleton',
+                height=800,
+            )
+        }
+    return no_update
+
 if __name__ == '__main__':
     app.run_server(debug=True)
