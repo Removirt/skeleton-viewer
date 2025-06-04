@@ -243,32 +243,34 @@ def handle_click(clickData, slider_value, relayoutData):
 
 @app.callback(
     Output("3d-scatter-plot", "figure"),
-    Input("save-button", "n_clicks")
+    [Input("save-button", "n_clicks")],
+    [State("3d-scatter-plot", "relayoutData")]
 )
-def save_skeleton_points(n_clicks):
+def save_skeleton_points(n_clicks, relayoutData):
     if n_clicks > 0:
-        # save_skeleton(skeletonization_results['skeleton_points'], filename=SKELETON_FILEPATH)  <-- Línea original comentada
-        # <-- Usamos skeleton_filepath
-        save_skeleton(
-            skeletonization_results['skeleton_points'], filename=skeleton_filepath)
-        # Actualiza el gráfico 3D con el esqueleto modificado
+        # Save the skeleton points to the file
+        save_skeleton(skeletonization_results['skeleton_points'], filename=skeleton_filepath)
+        # Update the 3D skeleton scatter with the modified points
         skeleton_points = np.array(skeletonization_results['skeleton_points'])
         scatter_skeleton = go.Scatter3d(
-            x=skeleton_points[:, 0], y=skeleton_points[:,
-                                                       1], z=skeleton_points[:, 2],
+            x=skeleton_points[:, 0], y=skeleton_points[:, 1], z=skeleton_points[:, 2],
             mode='markers',
             marker=dict(size=2, color='red', opacity=0.5),
             name="Skeleton"
         )
         skeletonization_results['scatter_skeleton'] = scatter_skeleton
 
-        # 3D graph update
+        # Build the new layout. If a camera view is specified in relayoutData, preserve it.
+        layout = go.Layout(
+            title='3D Scatter Plot of Volume with Modified Skeleton',
+            height=800,
+        )
+        if relayoutData and 'scene.camera' in relayoutData:
+            layout.scene = dict(camera=relayoutData['scene.camera'])
+
         return {
             'data': [scatter_volume, scatter_skeleton],
-            'layout': go.Layout(
-                title='3D Scatter Plot of Volume with Modified Skeleton',
-                height=800,
-            )
+            'layout': layout
         }
     return no_update
 
