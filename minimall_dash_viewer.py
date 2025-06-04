@@ -8,9 +8,12 @@ import json
 import argparse  # <-- New import for arguments
 
 # Process command-line arguments
-parser = argparse.ArgumentParser(description="Dash app for vessel skeleton visualization")
-parser.add_argument("labels_filepath", help="Path to the labels NIfTI file (mandatory).")
-parser.add_argument("--skeleton_filepath", help="Optional path to the skeleton JSON file.")
+parser = argparse.ArgumentParser(
+    description="Dash app for vessel skeleton visualization")
+parser.add_argument("labels_filepath",
+                    help="Path to the labels NIfTI file (mandatory).")
+parser.add_argument("--skeleton_filepath",
+                    help="Optional path to the skeleton JSON file.")
 args = parser.parse_args()
 
 labels_filepath = args.labels_filepath  # <-- Using the mandatory argument
@@ -31,11 +34,14 @@ else:
         else:
             number = "default"
         skeleton_basename = f"modified_skeleton_{number}.json"
-        skeleton_filepath = os.path.join(os.path.dirname(labels_filepath), skeleton_basename)
+        skeleton_filepath = os.path.join(
+            os.path.dirname(labels_filepath), skeleton_basename)
     except Exception as e:
         skeleton_filepath = "../data/default_modified_skeleton.json"
 
 # Function to load label data from a NIfTI file
+
+
 def load_labels(filepath):
     labels_nib = nib.load(filepath)
     labels = labels_nib.get_fdata().astype(np.uint8)
@@ -45,8 +51,10 @@ def load_labels(filepath):
     return labels
 
 # Displays the original volume in a 3D scatter plot
+
+
 def plot_volume(labels, alpha=0.05):
-    volume = np.where(labels==1) # TODO Change to use load_index function
+    volume = np.where(labels == 1)  # TODO Change to use load_index function
     scatter_volume = go.Scatter3d(
         x=volume[0], y=volume[1], z=volume[2],
         mode='markers',
@@ -56,6 +64,8 @@ def plot_volume(labels, alpha=0.05):
     return scatter_volume
 
 # Displays a 2D slice of labels along the Z axis
+
+
 def plot_z_slice(labels, slice_index):
     z_slice = labels[:, :, slice_index]
     x, y = np.where(z_slice)
@@ -68,18 +78,24 @@ def plot_z_slice(labels, slice_index):
     return scatter_slice
 
 # Performs skeletonization and returns the reduced structure as a set of points
+
+
 def load_thinning(labels):
     skeleton = skeletonize(labels)
     skeleton_points = np.array(np.where(skeleton)).T
     return skeleton_points
 
 # Saves skeleton points to a JSON file
+
+
 def save_skeleton(skeleton_points, filename):
     with open(filename, 'w') as f:
         json.dump(skeleton_points, f)
     print(f"Skeleton saved to {filename}")
 
 # Function to generate the 2D slice figure
+
+
 def generate_slice_figure(slice_index, labels, skeleton_points):
     scatter_slice = plot_z_slice(labels, slice_index)
     # Filter skeleton points to show only those in the current Z slice
@@ -106,6 +122,7 @@ def generate_slice_figure(slice_index, labels, skeleton_points):
         )
     }
 
+
 # Initialize the Dash app
 app = Dash(__name__, prevent_initial_callbacks=True)
 
@@ -118,7 +135,8 @@ if os.path.exists(skeleton_filepath):
     skeleton_points = np.array(json.load(open(skeleton_filepath)))
 else:
     skeleton_points = load_thinning(labels)
-    os.makedirs(os.path.dirname(skeleton_filepath), exist_ok=True)  # <-- Using skeleton_filepath
+    os.makedirs(os.path.dirname(skeleton_filepath),
+                exist_ok=True)  # <-- Using skeleton_filepath
 
 # Store skeleton points in a mutable list
 skeleton_points_list = skeleton_points.tolist()
@@ -170,38 +188,59 @@ app.layout = html.Div([
     html.Div(id="save-message")
 ])
 
-# Callback to update the 2D slice based on the slider
+
 @app.callback(
     Output('2d-slice-plot', 'figure'),
-    Input('z-slider', 'value')
+    [Input('z-slider', 'value')],
+    State('2d-slice-plot', 'relayoutData')
 )
-def update_slice(slider_value):
+def update_slice(slider_value, relayoutData):
     global z_slice
     z_slice = slider_value
-    return generate_slice_figure(z_slice, labels, skeletonization_results['skeleton_points'])
+    figure = generate_slice_figure(
+        z_slice, labels, skeletonization_results['skeleton_points'])
+    if relayoutData:
+        if 'xaxis.range[0]' in relayoutData and 'xaxis.range[1]' in relayoutData:
+            figure['layout']['xaxis'] = {
+                'range': [relayoutData['xaxis.range[0]'], relayoutData['xaxis.range[1]']]}
+        if 'yaxis.range[0]' in relayoutData and 'yaxis.range[1]' in relayoutData:
+            figure['layout']['yaxis'] = {
+                'range': [relayoutData['yaxis.range[0]'], relayoutData['yaxis.range[1]']]}
+    return figure
 
-# Callback for handling clicks on the 2D slice plot
+# Updated callback for handling clicks on the 2D slice plot
+
+
 @app.callback(
     Output('2d-slice-plot', 'figure', allow_duplicate=True),
     [Input('2d-slice-plot', 'clickData')],
-    State('z-slider', 'value'),
+    [State('z-slider', 'value'),
+     State('2d-slice-plot', 'relayoutData')]
 )
-def handle_click(clickData, slider_value):
+def handle_click(clickData, slider_value, relayoutData):
     if clickData:
         point_data = clickData['points'][0]
         x, y = int(point_data['x']), int(point_data['y'])
         z = slider_value
         point = [x, y, z]
-
         if point in skeletonization_results['skeleton_points']:
             skeletonization_results['skeleton_points'].remove(point)
         else:
             skeletonization_results['skeleton_points'].append(point)
-
-    # Regenerates the 2D plot with the updated skeleton points
-    return generate_slice_figure(slider_value, labels, skeletonization_results['skeleton_points'])
+    figure = generate_slice_figure(
+        slider_value, labels, skeletonization_results['skeleton_points'])
+    if relayoutData:
+        if 'xaxis.range[0]' in relayoutData and 'xaxis.range[1]' in relayoutData:
+            figure['layout']['xaxis'] = {
+                'range': [relayoutData['xaxis.range[0]'], relayoutData['xaxis.range[1]']]}
+        if 'yaxis.range[0]' in relayoutData and 'yaxis.range[1]' in relayoutData:
+            figure['layout']['yaxis'] = {
+                'range': [relayoutData['yaxis.range[0]'], relayoutData['yaxis.range[1]']]}
+    return figure
 
 # Callback to save the modified skeleton points when clicking the Save button
+
+
 @app.callback(
     Output("3d-scatter-plot", "figure"),
     Input("save-button", "n_clicks")
@@ -209,11 +248,14 @@ def handle_click(clickData, slider_value):
 def save_skeleton_points(n_clicks):
     if n_clicks > 0:
         # save_skeleton(skeletonization_results['skeleton_points'], filename=SKELETON_FILEPATH)  <-- Línea original comentada
-        save_skeleton(skeletonization_results['skeleton_points'], filename=skeleton_filepath)  # <-- Usamos skeleton_filepath
+        # <-- Usamos skeleton_filepath
+        save_skeleton(
+            skeletonization_results['skeleton_points'], filename=skeleton_filepath)
         # Actualiza el gráfico 3D con el esqueleto modificado
         skeleton_points = np.array(skeletonization_results['skeleton_points'])
         scatter_skeleton = go.Scatter3d(
-            x=skeleton_points[:, 0], y=skeleton_points[:, 1], z=skeleton_points[:, 2],
+            x=skeleton_points[:, 0], y=skeleton_points[:,
+                                                       1], z=skeleton_points[:, 2],
             mode='markers',
             marker=dict(size=2, color='red', opacity=0.5),
             name="Skeleton"
@@ -229,6 +271,7 @@ def save_skeleton_points(n_clicks):
             )
         }
     return no_update
+
 
 if __name__ == '__main__':
     app.run_server(debug=True)
