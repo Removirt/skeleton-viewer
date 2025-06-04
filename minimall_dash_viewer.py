@@ -145,7 +145,7 @@ skeleton_points_list = skeleton_points.tolist()
 scatter_skeleton_3d = go.Scatter3d(
     x=skeleton_points[:, 0], y=skeleton_points[:, 1], z=skeleton_points[:, 2],
     mode='markers',
-    marker=dict(size=2, color='red', opacity=0.5),
+    marker=dict(size=2, color='red', opacity=0.8),
     name="Skeleton"
 )
 
@@ -243,35 +243,53 @@ def handle_click(clickData, slider_value, relayoutData):
 
 @app.callback(
     Output("3d-scatter-plot", "figure"),
-    [Input("save-button", "n_clicks")],
+    [Input("save-button", "n_clicks"),
+     Input("z-slider", "value")],
     [State("3d-scatter-plot", "relayoutData")]
 )
-def save_skeleton_points(n_clicks, relayoutData):
+def update_3d_plot(n_clicks, slider_value, relayoutData):
+    global z_slice
+    z_slice = slider_value
+
+    # Update dark overlay for the selected slice
+    slice_data = np.where(labels[:, :, slider_value] == 1)
+    dark_slice = go.Scatter3d(
+        x=slice_data[0],
+        y=slice_data[1],
+        z=np.full_like(slice_data[0], slider_value),
+        mode='markers',
+        marker=dict(size=2, color='blue', opacity=0.1),
+        name=f"Slice {slider_value} Overlay"
+    )
+
+    # Update skeleton trace from the stored skeleton points
+    skeleton_points = np.array(skeletonization_results['skeleton_points'])
+    scatter_skeleton = go.Scatter3d(
+        x=skeleton_points[:, 0],
+        y=skeleton_points[:, 1],
+        z=skeleton_points[:, 2],
+        mode='markers',
+        marker=dict(size=2, color='red', opacity=0.8),
+        name="Skeleton"
+    )
+    skeletonization_results['scatter_skeleton'] = scatter_skeleton
+
+    # If the save button was clicked, save the skeleton to file.
     if n_clicks > 0:
-        # Save the skeleton points to the file
         save_skeleton(skeletonization_results['skeleton_points'], filename=skeleton_filepath)
-        # Update the 3D skeleton scatter with the modified points
-        skeleton_points = np.array(skeletonization_results['skeleton_points'])
-        scatter_skeleton = go.Scatter3d(
-            x=skeleton_points[:, 0], y=skeleton_points[:, 1], z=skeleton_points[:, 2],
-            mode='markers',
-            marker=dict(size=2, color='red', opacity=0.5),
-            name="Skeleton"
-        )
-        skeletonization_results['scatter_skeleton'] = scatter_skeleton
 
-        # Build the new layout. If a camera view is specified in relayoutData, preserve it.
-        layout = go.Layout(
-            title='3D Scatter Plot of Volume with Modified Skeleton',
-            height=800,
-        )
-        if relayoutData and 'scene.camera' in relayoutData:
-            layout.scene = dict(camera=relayoutData['scene.camera'])
+    # Build the layout and preserve camera view if provided.
+    layout = go.Layout(
+        title='3D Scatter Plot of Volume with Modified Skeleton',
+        height=800,
+    )
+    if relayoutData and 'scene.camera' in relayoutData:
+        layout.scene = dict(camera=relayoutData['scene.camera'])
 
-        return {
-            'data': [scatter_volume, scatter_skeleton],
-            'layout': layout
-        }
+    return {
+        'data': [scatter_volume, scatter_skeleton, dark_slice],
+        'layout': layout
+    }
     return no_update
 
 
