@@ -9,26 +9,19 @@ This tool provides an interactive interface for viewing and modifying 3D skeleto
 ## Data Storage and Access
 
 ### Input Data Format
+
 - **Labels File**: NIfTI format (`.nii` or `.nii.gz`) containing labeled voxel data
 - **Skeleton File**: JSON format containing skeleton point coordinates (optional)
 
-### Data Organization
-The application expects data to be organized as follows:
-```
-data/
-├── imagesTr/           # Training images
-├── labelsTr/           # Training labels  
-├── corrected_segmentations/  # Modified segmentation files
-└── modified_skeletons/       # Edited skeleton JSON files
-```
-
 ### Data Access Patterns
+
 1. **Automatic File Discovery**: When only a labels file is provided, the app automatically searches for corresponding skeleton files using naming conventions
 2. **Explicit File Paths**: Both labels and skeleton files can be specified directly via command-line arguments
-3. **Dynamic Loading**: Data is loaded on-demand to optimize memory usage
 
 ### Skeleton Data Structure
+
 Skeleton data is stored as JSON arrays containing 3D coordinates:
+
 ```json
 [
   [x1, y1, z1],
@@ -40,30 +33,23 @@ Skeleton data is stored as JSON arrays containing 3D coordinates:
 ## Features
 
 ### Core Functionality
+
 - **3D Volume Visualization**: Interactive 3D scatter plot of the original labeled volume
 - **Skeleton Overlay**: Real-time display of skeletal structures on top of volume data
 - **Cross-sectional Views**: 2D slice visualization with synchronized skeleton points
 - **Interactive Editing**: Click-to-add/remove skeleton points directly on 2D slices
 
 ### User Interface
+
 - **Dual-panel Layout**: Side-by-side 3D and 2D views for comprehensive analysis
 - **Z-axis Navigation**: Slider control for browsing through volume slices
 - **Camera Persistence**: Maintains 3D view orientation during interactions
 - **Real-time Updates**: Immediate visual feedback for all editing operations
 
-### Data Management
-- **Automatic Skeletonization**: Generates skeleton from volume data using scikit-image morphological operations
-- **Save Functionality**: Persist modified skeleton data to JSON files
-- **Backup and Versioning**: Automatic file naming with numerical suffixes
-
-### Advanced Features
-- **Slice Highlighting**: Visual overlay showing current slice position in 3D view
-- **Zoom Persistence**: Maintains zoom level and pan position across slice changes
-- **Error Handling**: Robust file path resolution and fallback mechanisms
-
 ## Usage
 
 ### Command Line Interface
+
 ```bash
 # Basic usage with labels file only
 python minimall_dash_viewer.py /path/to/labels.nii.gz
@@ -73,6 +59,7 @@ python minimall_dash_viewer.py /path/to/labels.nii.gz --skeleton_filepath /path/
 ```
 
 ### Interactive Operations
+
 1. **Navigation**: Use the Z-slider to navigate through volume slices
 2. **Editing**: Click on the 2D slice view to add/remove skeleton points
 3. **Saving**: Click "Save Skeleton" button to persist changes
@@ -81,6 +68,7 @@ python minimall_dash_viewer.py /path/to/labels.nii.gz --skeleton_filepath /path/
 ## Technical Details
 
 ### Dependencies
+
 - **Dash**: Web application framework
 - **Plotly**: Interactive plotting and visualization
 - **NiBabel**: NIfTI file format support
@@ -88,12 +76,15 @@ python minimall_dash_viewer.py /path/to/labels.nii.gz --skeleton_filepath /path/
 - **scikit-image**: Image processing and skeletonization
 
 ### Performance Considerations
+
 - Volume data is downsampled for display to maintain responsiveness
 - Skeleton points are stored in memory for real-time editing
 - 3D rendering uses optimized marker sizes and opacity levels
 
 ### File Naming Conventions
+
 The application uses intelligent file naming:
+
 - Skeleton files: `modified_skeleton_{number}.json`
 - Automatic number extraction from input filenames
 - Fallback to default naming when extraction fails
