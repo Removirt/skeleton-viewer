@@ -10,13 +10,11 @@ This tool provides an interactive interface for viewing and modifying 3D skeleto
 
 ### Input Data Format
 
-- **Labels File**: NIfTI format (`.nii` or `.nii.gz`) containing labeled voxel data
-- **Skeleton File**: JSON format containing skeleton point coordinates (optional)
+The application accepts NIfTI format files (`.nii` or `.nii.gz`) containing labeled voxel data as the primary input. Skeleton files in JSON format containing skeleton point coordinates are optional. When no skeleton file is provided, the application automatically generates a 3D skeleton using scikit-image's morphological skeletonization algorithm.
 
 ### Data Access Patterns
 
-1. **Automatic File Discovery**: When only a labels file is provided, the app automatically searches for corresponding skeleton files using naming conventions
-2. **Explicit File Paths**: Both labels and skeleton files can be specified directly via command-line arguments
+The application supports flexible data access through automatic file discovery when only a labels file is provided, searching for corresponding skeleton files using intelligent naming conventions. Alternatively, both labels and skeleton files can be specified directly via command-line arguments for explicit control over data sources.
 
 ### Skeleton Data Structure
 
@@ -34,17 +32,11 @@ Skeleton data is stored as JSON arrays containing 3D coordinates:
 
 ### Core Functionality
 
-- **3D Volume Visualization**: Interactive 3D scatter plot of the original labeled volume
-- **Skeleton Overlay**: Real-time display of skeletal structures on top of volume data
-- **Cross-sectional Views**: 2D slice visualization with synchronized skeleton points
-- **Interactive Editing**: Click-to-add/remove skeleton points directly on 2D slices
+The application provides interactive 3D scatter plot visualization of the original labeled volume with real-time display of skeletal structures overlaid on top of volume data. Cross-sectional views enable 2D slice visualization with synchronized skeleton points, while interactive editing allows users to click-to-add or remove skeleton points directly on 2D slices.
 
 ### User Interface
 
-- **Dual-panel Layout**: Side-by-side 3D and 2D views for comprehensive analysis
-- **Z-axis Navigation**: Slider control for browsing through volume slices
-- **Camera Persistence**: Maintains 3D view orientation during interactions
-- **Real-time Updates**: Immediate visual feedback for all editing operations
+The interface features a dual-panel layout with side-by-side 3D and 2D views for comprehensive analysis. Z-axis navigation through a slider control enables browsing through volume slices, while camera persistence maintains 3D view orientation during interactions. All operations provide immediate visual feedback with real-time updates.
 
 ## Usage
 
@@ -60,31 +52,14 @@ python minimall_dash_viewer.py /path/to/labels.nii.gz --skeleton_filepath /path/
 
 ### Interactive Operations
 
-1. **Navigation**: Use the Z-slider to navigate through volume slices
-2. **Editing**: Click on the 2D slice view to add/remove skeleton points
-3. **Saving**: Click "Save Skeleton" button to persist changes
-4. **3D Exploration**: Rotate, zoom, and pan the 3D view for detailed analysis
+Navigate through volume slices using the Z-slider control. Edit skeleton points by clicking on the 2D slice view to add or remove points. Save modifications by clicking the "Save Skeleton" button to persist changes. Explore the 3D view by rotating, zooming, and panning for detailed analysis.
 
 ## Technical Details
 
 ### Dependencies
 
-- **Dash**: Web application framework
-- **Plotly**: Interactive plotting and visualization
-- **NiBabel**: NIfTI file format support
-- **NumPy**: Numerical computations
-- **scikit-image**: Image processing and skeletonization
-
-### Performance Considerations
-
-- Volume data is downsampled for display to maintain responsiveness
-- Skeleton points are stored in memory for real-time editing
-- 3D rendering uses optimized marker sizes and opacity levels
+The application requires Dash for the web application framework, Plotly for interactive plotting and visualization, NiBabel for NIfTI file format support, NumPy for numerical computations, and scikit-image for image processing and automatic skeletonization.
 
 ### File Naming Conventions
 
-The application uses intelligent file naming:
-
-- Skeleton files: `modified_skeleton_{number}.json`
-- Automatic number extraction from input filenames
-- Fallback to default naming when extraction fails
+The application uses intelligent file naming with skeleton files following the pattern `modified_skeleton_{number}.json`. Automatic number extraction from input filenames provides consistent naming, with fallback to default naming when extraction fails.
