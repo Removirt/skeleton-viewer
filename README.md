@@ -62,4 +62,4 @@ The application requires Dash for the web application framework, Plotly for inte
 
 ### File Naming Conventions
 
-The application uses intelligent file naming with skeleton files following the pattern `modified_skeleton_{number}.json`. Automatic number extraction from input filenames provides consistent naming, with fallback to default naming when extraction fails.
+The application uses intelligent file naming with skeleton files following the pattern `hepaticvessel_{number}_{annotator}.json`. Automatic number extraction from input filenames provides consistent naming, with fallback to default naming when extraction fails.
