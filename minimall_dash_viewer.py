@@ -89,9 +89,57 @@ def load_thinning(labels):
 
 
 def save_skeleton(skeleton_points, filename):
+    # Ensure a pure Python list is saved (JSON cannot serialize numpy arrays)
+    to_save = np.array(skeleton_points).tolist()
     with open(filename, 'w') as f:
-        json.dump(skeleton_points, f)
+        json.dump(to_save, f)
     print(f"Skeleton saved to {filename}")
+
+
+def load_skeleton_nifti_to_json(nifti_path, json_path=None):
+    """
+    Load a NIfTI file containing a skeleton (non-zero voxels indicate skeleton points),
+    save the coordinates to a JSON file, and return the list of points.
+
+    Parameters
+    ----------
+    nifti_path : str
+        Path to the input NIfTI file (.nii or .nii.gz).
+    json_path : str or None
+        Optional target JSON path. If None, the JSON will be created next to the
+        NIfTI file with the same basename and .json extension.
+
+    Returns
+    -------
+    list
+        List of [x,y,z] integer coordinates (as Python lists).
+    """
+    nif = nib.load(nifti_path)
+    data = nif.get_fdata()
+    # non-zero points indicate skeleton
+    coords = np.argwhere(data != 0)
+    coords_list = coords.astype(int).tolist()
+
+    if json_path is None:
+        base = os.path.basename(nifti_path)
+        # remove .nii or .nii.gz
+        if base.endswith('.nii.gz'):
+            base = base[:-7]
+        elif base.endswith('.nii'):
+            base = base[:-4]
+        json_basename = f"{base}_from_nifti.json"
+        json_path = os.path.join(os.path.dirname(nifti_path), json_basename)
+
+    # Ensure target directory exists (handle case where json_path has no directory)
+    json_dir = os.path.dirname(json_path) or '.'
+    os.makedirs(json_dir, exist_ok=True)
+
+    # Save JSON
+    with open(json_path, 'w') as f:
+        json.dump(coords_list, f)
+
+    print(f"Converted NIfTI skeleton '{nifti_path}' -> JSON '{json_path}' ({len(coords_list)} points)")
+    return coords_list, json_path
 
 # Function to generate the 2D slice figure
 
@@ -130,13 +178,40 @@ app = Dash(__name__, prevent_initial_callbacks=True)
 labels = load_labels(labels_filepath)  # <-- Using the labels_filepath argument
 scatter_volume = plot_volume(labels)
 
-# Load skeleton from JSON file if it exists
+# Load skeleton from JSON or NIfTI file if it exists, otherwise compute by thinning
 if os.path.exists(skeleton_filepath):
-    skeleton_points = np.array(json.load(open(skeleton_filepath)))
+    # If the provided skeleton is a NIfTI file, convert to JSON and load
+    if skeleton_filepath.endswith('.nii') or skeleton_filepath.endswith('.nii.gz'):
+        coords_list, json_out = load_skeleton_nifti_to_json(skeleton_filepath)
+        skeleton_filepath = json_out
+        skeleton_points = np.array(coords_list)
+    else:
+        # Try to load as JSON (the typical expected format)
+        try:
+            skeleton_points = np.array(json.load(open(skeleton_filepath)))
+        except Exception:
+            # Fallback: attempt to interpret file as NIfTI if extension is ambiguous
+            try:
+                coords_list, json_out = load_skeleton_nifti_to_json(skeleton_filepath)
+                skeleton_filepath = json_out
+                skeleton_points = np.array(coords_list)
+            except Exception:
+                # Final fallback: compute thinning
+                print(f"Could not parse skeleton file '{skeleton_filepath}', computing thinning instead.")
+                skeleton_points = load_thinning(labels)
+                # ensure directory exists and save
+                dirpath = os.path.dirname(skeleton_filepath) or '.'
+                os.makedirs(dirpath, exist_ok=True)
+                save_skeleton(skeleton_points, skeleton_filepath)
 else:
     skeleton_points = load_thinning(labels)
-    os.makedirs(os.path.dirname(skeleton_filepath),
-                exist_ok=True)  # <-- Using skeleton_filepath
+    dirpath = os.path.dirname(skeleton_filepath) or '.'
+    os.makedirs(dirpath, exist_ok=True)
+    # Save computed skeleton to the chosen json path for later reuse
+    try:
+        save_skeleton(skeleton_points, skeleton_filepath)
+    except Exception as e:
+        print(f"Warning: could not save computed skeleton to {skeleton_filepath}: {e}")
 
 # Store skeleton points in a mutable list
 skeleton_points_list = skeleton_points.tolist()
